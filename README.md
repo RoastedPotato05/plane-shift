@@ -5,10 +5,10 @@ controls: tab to switch cameras, in the 3D box view hold right click to pan the 
 recommend using the Level 1 scene as a template probably
 
 general rundown:
-- all you really need to worry about is in the Prefabs folder, theres a couple custom assets i made and a bunch of folders with assets i found on the asset store
-- make a copy of Level 1, in the scene theres a couple layer things stacked on top of another and a huge sphere of space background
+- all you really need to worry about are the Prefabs, Materials, and Scenes folders, in Prefabs theres a couple custom assets i made and a bunch of folders with assets i found on the asset store
+- make a copy of the Level 1 scene, in the scene theres a couple layer things stacked on top of another and a huge sphere of space background
 - inside the sphere is where the box of objects is, you dont really need to mess with big stack of layers unless you want to move around the 2DBorder objects or the green goal object
-- if you do you can copy whatever or if you make more walls just put them around the same like y-level layer as the other ones, make sure to give it a Wall tag that is very important
+- (if you do you can copy whatever or if you make more walls just put them around the same like y-level layer as the other ones, make sure to give it a Wall tag that is very important)
 - (Wall tag will designate what the player bounces off of, Obstacle tag is what kills the player, Goal tag is what the goal is blah blah blah)
 - as for objects in the box it's set up like this:
 - for any object you want to work properly as like an obstacle, first make a solid color material and give it the DoubleSidedTexture shader (this makes the cross sections show up in the other area) and apply it to the object
