@@ -99,6 +99,7 @@ public class _3DCameraController : MonoBehaviour
     private Transform highlightedObject;
     private Material selectionHighlightMaterial;
     private readonly List<GameObject> spawnedArrows = new List<GameObject>();
+    private GameObject arrowHolder;
 
     private void Awake()
     {
@@ -154,6 +155,8 @@ public class _3DCameraController : MonoBehaviour
 
     private void OnDisable()
     {
+        DespawnArrows();
+
         if (selectionHighlightRoot != null) {
             Destroy(selectionHighlightRoot);
             selectionHighlightRoot = null;
@@ -246,6 +249,9 @@ public class _3DCameraController : MonoBehaviour
         if (bounds != null) newPos = bounds.Clamp(newPos);
         constrainedDelta = newPos - selectedObject.position;
         selectedObject.position = newPos;
+        if (arrowHolder != null) {
+            arrowHolder.transform.position += constrainedDelta;
+        }
         lastDragWorldPoint += constrainedDelta;
     }
 
@@ -314,6 +320,9 @@ public class _3DCameraController : MonoBehaviour
     {
         DespawnArrows();
 
+        arrowHolder = new GameObject("ArrowHolder");
+        arrowHolder.hideFlags = HideFlags.DontSave;
+
         Bounds bounds = new Bounds(target.position, Vector3.zero);
         Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
         foreach (Renderer r in renderers) {
@@ -350,13 +359,12 @@ public class _3DCameraController : MonoBehaviour
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         bool foundSurface = false;
         for (int i = 0; i < hits.Length; i++) {
-            if (TryGetTagRuleFor(hits[i].collider.gameObject, out _) ||
-                (hits[i].collider.transform.parent != null && TryGetTagRuleFor(hits[i].collider.transform.root.gameObject, out _))) {
+            if (IsPartOfTarget(hits[i].collider, target)) {
                 spawnPoint = hits[i].point + worldDir * (arrowSurfaceOffset + arrowPivotOffset);
                 foundSurface = true;
                 Quaternion rotation = Quaternion.FromToRotation(prefabNaturalDir, worldDir) * prefab.transform.rotation;
                 GameObject arrow = Instantiate(prefab, spawnPoint, rotation);
-                arrow.transform.SetParent(target, true);
+                if (arrowHolder != null) arrow.transform.SetParent(arrowHolder.transform, true);
                 spawnedArrows.Add(arrow);
                 return;
             }
@@ -365,7 +373,7 @@ public class _3DCameraController : MonoBehaviour
             spawnPoint = bounds.center + worldDir * (extent + arrowSurfaceOffset + arrowPivotOffset);
             Quaternion rotation = Quaternion.FromToRotation(prefabNaturalDir, worldDir) * prefab.transform.rotation;
             GameObject arrow = Instantiate(prefab, spawnPoint, rotation);
-            arrow.transform.SetParent(target, true);
+            if (arrowHolder != null) arrow.transform.SetParent(arrowHolder.transform, true);
             spawnedArrows.Add(arrow);
         }
     }
@@ -378,6 +386,10 @@ public class _3DCameraController : MonoBehaviour
             }
         }
         spawnedArrows.Clear();
+        if (arrowHolder != null) {
+            DestroyImmediate(arrowHolder);
+            arrowHolder = null;
+        }
     }
 
     private void ClearSelection()
@@ -589,6 +601,16 @@ public class _3DCameraController : MonoBehaviour
         }
 
         return result;
+    }
+
+    private static bool IsPartOfTarget(Collider col, Transform target)
+    {
+        Transform t = col.transform;
+        while (t != null) {
+            if (t == target) return true;
+            t = t.parent;
+        }
+        return false;
     }
 
     private static bool TryAddEdge(int a, int b, HashSet<EdgeKey> set, List<Vector2Int> result, int limit)

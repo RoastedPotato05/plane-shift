@@ -95,7 +95,9 @@ public class Main : MonoBehaviour
         foreach (Renderer rend in allRenderers) {
             bool usesShader = false;
             foreach (Material m in rend.sharedMaterials) {
-                if (m != null && m.shader != null && m.shader.name == "Custom/DoubleSidedTexture") {
+                if (m != null && m.shader != null &&
+                    (m.shader.name == "Custom/DoubleSidedTexture" ||
+                     m.shader.name == "Custom/DoubleSidedTextureTransparent")) {
                     usesShader = true;
                     break;
                 }
@@ -121,7 +123,8 @@ public class Main : MonoBehaviour
             Material[] instanced = rend.materials;
             for (int i = 0; i < instanced.Length; i++) {
                 if (instanced[i] != null && instanced[i].shader != null &&
-                    instanced[i].shader.name == "Custom/DoubleSidedTexture") {
+                    (instanced[i].shader.name == "Custom/DoubleSidedTexture" ||
+                     instanced[i].shader.name == "Custom/DoubleSidedTextureTransparent")) {
                     instanced[i].SetColor("_OutlineColor", color);
                     instanced[i].SetFloat("_OutlineWidth", width);
                 }
@@ -139,7 +142,9 @@ public class Main : MonoBehaviour
             if (rend == null) continue;
             bool usesOutlineShader = false;
             foreach (Material mat in rend.sharedMaterials) {
-                if (mat != null && mat.shader != null && mat.shader.name == "Custom/DoubleSidedTexture") {
+                if (mat != null && mat.shader != null &&
+                    (mat.shader.name == "Custom/DoubleSidedTexture" ||
+                     mat.shader.name == "Custom/DoubleSidedTextureTransparent")) {
                     usesOutlineShader = true;
                     break;
                 }
