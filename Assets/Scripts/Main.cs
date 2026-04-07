@@ -78,6 +78,11 @@ public class Main : MonoBehaviour
     {
         if (levelCompleteUI != null) {
             levelCompleteUI.SetActive(true);
+            Canvas canvas = levelCompleteUI.GetComponent<Canvas>();
+            if (canvas != null) {
+                canvas.enabled = false;
+                canvas.enabled = true;
+            }
         }
     }
 
