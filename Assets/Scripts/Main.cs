@@ -94,22 +94,27 @@ public class Main : MonoBehaviour
         }
     }
 
+    private static string FindMovableTag(GameObject obj)
+    {
+        Transform t = obj.transform;
+        while (t != null) {
+            string tag = t.gameObject.tag;
+            if (tag == "MoveableX" || tag == "MoveableY" || tag == "MoveableZ" ||
+                tag == "MoveableXY" || tag == "MoveableXZ" || tag == "MoveableYZ" ||
+                tag == "MoveableXYZ") {
+                return tag;
+            }
+            t = t.parent;
+        }
+        return null;
+    }
+
     private void ApplyTagOutlines()
     {
         Renderer[] allRenderers = FindObjectsOfType<Renderer>();
         foreach (Renderer rend in allRenderers) {
-            bool usesShader = false;
-            foreach (Material m in rend.sharedMaterials) {
-                if (m != null && m.shader != null &&
-                    (m.shader.name == "Custom/DoubleSidedTexture" ||
-                     m.shader.name == "Custom/DoubleSidedTextureTransparent")) {
-                    usesShader = true;
-                    break;
-                }
-            }
-            if (!usesShader) continue;
-
-            string tag = rend.gameObject.tag;
+            string tag = FindMovableTag(rend.gameObject);
+            if (tag == null) continue;
             Color color;
             float width;
 
@@ -121,20 +126,44 @@ public class Main : MonoBehaviour
                 case "MoveableXZ":  color = new Color(0.855f, 0.200f, 0.925f); width = 0.1f; break;
                 case "MoveableYZ":  color = new Color(0.000f, 0.702f, 0.541f); width = 0.1f; break;
                 case "MoveableXYZ": color = Color.white;                       width = 0.1f; break;
-                default:            color = Color.black;                       width = 0f; break;
+                default:            continue;
             }
 
-            // Use instanced materials so shared assets are not modified.
+            // Apply to any existing material that already supports the outline properties.
+            bool hasOutlineShader = false;
             Material[] instanced = rend.materials;
             for (int i = 0; i < instanced.Length; i++) {
                 if (instanced[i] != null && instanced[i].shader != null &&
                     (instanced[i].shader.name == "Custom/DoubleSidedTexture" ||
-                     instanced[i].shader.name == "Custom/DoubleSidedTextureTransparent")) {
+                     instanced[i].shader.name == "Custom/DoubleSidedTextureTransparent" ||
+                     instanced[i].shader.name == "Custom/Outline")) {
                     instanced[i].SetColor("_OutlineColor", color);
                     instanced[i].SetFloat("_OutlineWidth", width);
+                    hasOutlineShader = true;
                 }
             }
             rend.materials = instanced;
+
+            // For objects without an outline-capable shader, add a child outline renderer
+            // so the original material array is untouched (EzySlice requires materials.Length == submeshCount).
+            if (!hasOutlineShader) {
+                Shader outlineShader = Shader.Find("Custom/Outline");
+                if (outlineShader != null) {
+                    MeshFilter mf = rend.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null) {
+                        GameObject outlineChild = new GameObject("OutlineRenderer");
+                        outlineChild.transform.SetParent(rend.transform, false);
+                        outlineChild.hideFlags = HideFlags.DontSave;
+                        MeshFilter childMf = outlineChild.AddComponent<MeshFilter>();
+                        childMf.sharedMesh = mf.sharedMesh;
+                        MeshRenderer childRend = outlineChild.AddComponent<MeshRenderer>();
+                        Material outlineMat = new Material(outlineShader);
+                        outlineMat.SetColor("_OutlineColor", color);
+                        outlineMat.SetFloat("_OutlineWidth", width);
+                        childRend.sharedMaterial = outlineMat;
+                    }
+                }
+            }
         }
     }
 
@@ -143,18 +172,8 @@ public class Main : MonoBehaviour
         MeshFilter[] allFilters = FindObjectsOfType<MeshFilter>();
         foreach (MeshFilter mf in allFilters) {
             if (mf.sharedMesh == null) continue;
-            Renderer rend = mf.GetComponent<Renderer>();
-            if (rend == null) continue;
-            bool usesOutlineShader = false;
-            foreach (Material mat in rend.sharedMaterials) {
-                if (mat != null && mat.shader != null &&
-                    (mat.shader.name == "Custom/DoubleSidedTexture" ||
-                     mat.shader.name == "Custom/DoubleSidedTextureTransparent")) {
-                    usesOutlineShader = true;
-                    break;
-                }
-            }
-            if (!usesOutlineShader) continue;
+            if (mf.GetComponent<Renderer>() == null) continue;
+            if (FindMovableTag(mf.gameObject) == null) continue;
             Mesh mesh = Instantiate(mf.sharedMesh);
             BakeSmoothNormalsIntoUV3(mesh);
             mf.mesh = mesh;

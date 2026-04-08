@@ -2,6 +2,10 @@ using UnityEngine;
 
 public class MovementBounds : MonoBehaviour
 {
+    [Header("Collision")]
+    [Tooltip("Enable convex on all MeshColliders in this object at runtime (required for collision detection against moving objects).")]
+    public bool enableConvexAtRuntime = false;
+
     // All min/max values are offsets relative to the object's position at Start
     public bool constrainX;
     public float minX = -5f, maxX = 5f;
@@ -19,6 +23,11 @@ public class MovementBounds : MonoBehaviour
 
     private void Start()
     {
+        if (enableConvexAtRuntime) {
+            foreach (MeshCollider mc in GetComponentsInChildren<MeshCollider>()) {
+                mc.convex = true;
+            }
+        }
         Vector3 p = transform.position;
         _worldMinX = p.x + minX; _worldMaxX = p.x + maxX;
         _worldMinY = p.y + minY; _worldMaxY = p.y + maxY;

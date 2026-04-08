@@ -244,15 +244,98 @@ public class _3DCameraController : MonoBehaviour
 
         Vector3 rawDelta = currentWorldPoint - lastDragWorldPoint;
         Vector3 constrainedDelta = selectedTagRule.Apply(rawDelta);
-        Vector3 newPos = selectedObject.position + constrainedDelta;
-        MovementBounds bounds = selectedObject.GetComponent<MovementBounds>();
-        if (bounds != null) newPos = bounds.Clamp(newPos);
-        constrainedDelta = newPos - selectedObject.position;
-        selectedObject.position = newPos;
-        if (arrowHolder != null) {
-            arrowHolder.transform.position += constrainedDelta;
+
+        // Clamp per-frame delta to the object's smallest half-extent to prevent tunneling.
+        if (constrainedDelta.sqrMagnitude > 0.00001f) {
+            Bounds objectBounds = GetCombinedBounds(selectedObject);
+            float minHalfExtent = Mathf.Min(objectBounds.extents.x, objectBounds.extents.y, objectBounds.extents.z);
+            minHalfExtent = Mathf.Max(minHalfExtent, 0.05f);
+            float len = constrainedDelta.magnitude;
+            if (len > minHalfExtent)
+                constrainedDelta = constrainedDelta * (minHalfExtent / len);
         }
-        lastDragWorldPoint += constrainedDelta;
+
+        if (constrainedDelta.sqrMagnitude > 0.00001f) {
+            MovementBounds bounds = selectedObject.GetComponent<MovementBounds>();
+            Collider[] selfColliders = selectedObject.GetComponentsInChildren<Collider>();
+            bool hasColliders = selfColliders != null && selfColliders.Length > 0;
+
+            Vector3 startPos = selectedObject.position;
+            Vector3 desiredPos = startPos + constrainedDelta;
+            if (bounds != null) desiredPos = bounds.Clamp(desiredPos);
+
+            Vector3 newPos = hasColliders
+                ? ResolveCollisions(selectedObject, desiredPos, selfColliders, selectedTagRule)
+                : desiredPos;
+
+            Vector3 actualDelta = newPos - startPos;
+            selectedObject.position = newPos;
+            if (arrowHolder != null) arrowHolder.transform.position += actualDelta;
+        }
+
+        lastDragWorldPoint = currentWorldPoint;
+    }
+
+    private static Bounds GetCombinedBounds(Transform root)
+    {
+        Collider[] cols = root.GetComponentsInChildren<Collider>();
+        if (cols.Length == 0) return new Bounds(root.position, Vector3.one * 0.5f);
+        Bounds b = cols[0].bounds;
+        for (int i = 1; i < cols.Length; i++) b.Encapsulate(cols[i].bounds);
+        return b;
+    }
+
+    private static Vector3 ResolveCollisions(Transform selected, Vector3 desiredPos, Collider[] selfColliders, MovableTagRule rule)
+    {
+        Vector3 resolvedPos = desiredPos;
+        const int maxIterations = 4;
+
+        for (int iter = 0; iter < maxIterations; iter++) {
+            bool anyOverlap = false;
+            Vector3 posOffset = resolvedPos - selected.position;
+
+            foreach (Collider selfCol in selfColliders) {
+                if (selfCol == null || selfCol.isTrigger) continue;
+
+                Vector3 originalPos = selected.position;
+                selected.position = resolvedPos;
+                Physics.SyncTransforms();
+
+                Vector3 colCenter  = selfCol.bounds.center;
+                Vector3 colExtents = selfCol.bounds.extents;
+                Quaternion colRot  = selfCol.transform.rotation;
+
+                selected.position = originalPos;
+                Physics.SyncTransforms();
+
+                Collider[] overlaps = Physics.OverlapBox(colCenter, colExtents, colRot, ~0, QueryTriggerInteraction.Ignore);
+
+                foreach (Collider other in overlaps) {
+                    if (other == null || other.isTrigger) continue;
+                    bool isSelf = false;
+                    foreach (Collider sc in selfColliders) {
+                        if (sc == other) { isSelf = true; break; }
+                    }
+                    if (isSelf) continue;
+
+                    Vector3 selfColPos = selfCol.transform.position + posOffset;
+                    if (Physics.ComputePenetration(
+                            selfCol, selfColPos, selfCol.transform.rotation,
+                            other, other.transform.position, other.transform.rotation,
+                            out Vector3 pushDir, out float pushDist)) {
+                        Vector3 push = rule.Apply(pushDir * pushDist);
+                        if (push.sqrMagnitude > 0f) {
+                            resolvedPos += push;
+                            posOffset = resolvedPos - selected.position;
+                            anyOverlap = true;
+                        }
+                    }
+                }
+            }
+            if (!anyOverlap) break;
+        }
+
+        return resolvedPos;
     }
 
     private bool TryFindMovableTarget(Transform hitTransform, out Transform movableTarget, out MovableTagRule tagRule)

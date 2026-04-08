@@ -30,6 +30,7 @@ Shader "Custom/Outline"
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+                float3 smoothNormal : TEXCOORD3;
             };
 
             struct v2f
@@ -40,7 +41,10 @@ Shader "Custom/Outline"
             v2f vert(appdata v)
             {
                 v2f o;
-                float3 expandedPos = v.vertex.xyz + v.normal * _OutlineWidth;
+                float3 outlineNormal = (dot(v.smoothNormal, v.smoothNormal) > 0.0001)
+                    ? normalize(v.smoothNormal)
+                    : v.normal;
+                float3 expandedPos = v.vertex.xyz + outlineNormal * _OutlineWidth;
                 o.pos = UnityObjectToClipPos(float4(expandedPos, 1.0));
                 return o;
             }
