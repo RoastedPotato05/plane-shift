@@ -17,8 +17,11 @@ public class Main : MonoBehaviour
     [SerializeField, Range(0.1f, 0.5f)] private float previewWidth = 0.28f;
     [SerializeField, Range(0.1f, 0.5f)] private float previewHeight = 0.28f;
     [SerializeField, Range(0.0f, 0.1f)] private float previewMargin = 0.02f;
+    [SerializeField, Range(0f, 1f)] private float previewAlpha = 0.75f;
 
     private bool is2DPrimary;
+    private RenderTexture previewRT;
+    private Camera currentPreviewCamera;
 
     private void Awake()
     {
@@ -41,29 +44,72 @@ public class Main : MonoBehaviour
 
     private void ApplyCameraLayout()
     {
-        if (camera2D == null || camera3D == null) {
-            return;
-        }
+        if (camera2D == null || camera3D == null) return;
 
         Camera primaryCamera = is2DPrimary ? camera2D : camera3D;
         Camera previewCamera = is2DPrimary ? camera3D : camera2D;
 
-        primaryCamera.enabled = true;
-        previewCamera.enabled = true;
+        // Release RT from the camera that is no longer the preview.
+        if (currentPreviewCamera != null && currentPreviewCamera != previewCamera) {
+            currentPreviewCamera.targetTexture = null;
+            currentPreviewCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        }
+        currentPreviewCamera = previewCamera;
 
+        // Primary: normal full-screen render.
+        primaryCamera.targetTexture = null;
         primaryCamera.rect = new Rect(0f, 0f, 1f, 1f);
-        previewCamera.rect = new Rect(
-            1f - previewWidth - previewMargin,
-            previewMargin,
-            previewWidth,
-            previewHeight
-        );
-
         primaryCamera.depth = 0f;
-        previewCamera.depth = 1f;
+        primaryCamera.enabled = true;
+
+        // Preview: render into RT; OnGUI draws it with alpha.
+        EnsurePreviewRT();
+        previewCamera.targetTexture = previewRT;
+        previewCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        previewCamera.depth = 0f;
+        previewCamera.enabled = true;
 
         SetAudioListenerState(primaryCamera, true);
         SetAudioListenerState(previewCamera, false);
+    }
+
+    private void EnsurePreviewRT()
+    {
+        int rtW = Mathf.Max(1, Mathf.RoundToInt(Screen.width  * previewWidth));
+        int rtH = Mathf.Max(1, Mathf.RoundToInt(Screen.height * previewHeight));
+        if (previewRT != null && previewRT.width == rtW && previewRT.height == rtH) return;
+        if (previewRT != null) {
+            if (currentPreviewCamera != null) currentPreviewCamera.targetTexture = null;
+            previewRT.Release();
+            Destroy(previewRT);
+        }
+        previewRT = new RenderTexture(rtW, rtH, 16);
+        previewRT.Create();
+    }
+
+    private void OnGUI()
+    {
+        if (previewRT == null) return;
+        EnsurePreviewRT();
+        if (currentPreviewCamera != null) currentPreviewCamera.targetTexture = previewRT;
+
+        float sw = Screen.width;
+        float sh = Screen.height;
+        float pw = sw * previewWidth;
+        float ph = sh * previewHeight;
+        float px = sw * previewMargin;
+        float py = sh * previewMargin;
+
+        Color prev = GUI.color;
+        GUI.color = new Color(1f, 1f, 1f, previewAlpha);
+        GUI.DrawTexture(new Rect(px, py, pw, ph), previewRT);
+        GUI.color = prev;
+    }
+
+    private void OnDestroy()
+    {
+        if (currentPreviewCamera != null) currentPreviewCamera.targetTexture = null;
+        if (previewRT != null) { previewRT.Release(); Destroy(previewRT); previewRT = null; }
     }
 
     private void SetAudioListenerState(Camera targetCamera, bool isEnabled)

@@ -19,14 +19,14 @@ public class MovableTagRule
     public bool allowY = true;
     public bool allowZ = true;
 
-    public Vector3 Apply(Vector3 worldDelta)
+    public Vector3 Apply(Vector3 worldDelta, Quaternion rotation)
     {
-        return new Vector3(
-            allowX ? worldDelta.x : 0f,
-            allowY ? worldDelta.y : 0f,
-            allowZ ? worldDelta.z : 0f
-        );
+        Vector3 local = Quaternion.Inverse(rotation) * worldDelta;
+        local = new Vector3(allowX ? local.x : 0f, allowY ? local.y : 0f, allowZ ? local.z : 0f);
+        return rotation * local;
     }
+
+    public Vector3 Apply(Vector3 worldDelta) => Apply(worldDelta, Quaternion.identity);
 }
 
 [RequireComponent(typeof(Camera))]
@@ -242,11 +242,15 @@ public class _3DCameraController : MonoBehaviour
             return;
         }
 
-        Vector3 rawDelta = currentWorldPoint - lastDragWorldPoint;
-        Vector3 constrainedDelta = selectedTagRule.Apply(rawDelta);
+        MovementBounds movBounds = selectedObject.GetComponent<MovementBounds>();
+        Quaternion dirRot = movBounds != null ? movBounds.DirectionRotation : Quaternion.identity;
+        bool useCollision = movBounds != null && movBounds.enableConvexAtRuntime;
 
-        // Clamp per-frame delta to the object's smallest half-extent to prevent tunneling.
-        if (constrainedDelta.sqrMagnitude > 0.00001f) {
+        Vector3 rawDelta = currentWorldPoint - lastDragWorldPoint;
+        Vector3 constrainedDelta = selectedTagRule.Apply(rawDelta, dirRot);
+
+        // Only clamp per-frame delta (anti-tunnel) when collision resolution is active.
+        if (useCollision && constrainedDelta.sqrMagnitude > 0.00001f) {
             Bounds objectBounds = GetCombinedBounds(selectedObject);
             float minHalfExtent = Mathf.Min(objectBounds.extents.x, objectBounds.extents.y, objectBounds.extents.z);
             minHalfExtent = Mathf.Max(minHalfExtent, 0.05f);
@@ -256,16 +260,14 @@ public class _3DCameraController : MonoBehaviour
         }
 
         if (constrainedDelta.sqrMagnitude > 0.00001f) {
-            MovementBounds bounds = selectedObject.GetComponent<MovementBounds>();
             Collider[] selfColliders = selectedObject.GetComponentsInChildren<Collider>();
-            bool hasColliders = selfColliders != null && selfColliders.Length > 0;
 
             Vector3 startPos = selectedObject.position;
             Vector3 desiredPos = startPos + constrainedDelta;
-            if (bounds != null) desiredPos = bounds.Clamp(desiredPos);
+            if (movBounds != null) desiredPos = movBounds.Clamp(desiredPos);
 
-            Vector3 newPos = hasColliders
-                ? ResolveCollisions(selectedObject, desiredPos, selfColliders, selectedTagRule)
+            Vector3 newPos = useCollision
+                ? ResolveCollisions(selectedObject, desiredPos, selfColliders, selectedTagRule, dirRot)
                 : desiredPos;
 
             Vector3 actualDelta = newPos - startPos;
@@ -285,7 +287,7 @@ public class _3DCameraController : MonoBehaviour
         return b;
     }
 
-    private static Vector3 ResolveCollisions(Transform selected, Vector3 desiredPos, Collider[] selfColliders, MovableTagRule rule)
+    private static Vector3 ResolveCollisions(Transform selected, Vector3 desiredPos, Collider[] selfColliders, MovableTagRule rule, Quaternion dirRot)
     {
         Vector3 resolvedPos = desiredPos;
         const int maxIterations = 4;
@@ -323,7 +325,7 @@ public class _3DCameraController : MonoBehaviour
                             selfCol, selfColPos, selfCol.transform.rotation,
                             other, other.transform.position, other.transform.rotation,
                             out Vector3 pushDir, out float pushDist)) {
-                        Vector3 push = rule.Apply(pushDir * pushDist);
+                        Vector3 push = rule.Apply(pushDir * pushDist, dirRot);
                         if (push.sqrMagnitude > 0f) {
                             resolvedPos += push;
                             posOffset = resolvedPos - selected.position;
@@ -412,17 +414,20 @@ public class _3DCameraController : MonoBehaviour
             bounds.Encapsulate(r.bounds);
         }
 
+        MovementBounds mb = target.GetComponent<MovementBounds>();
+        Quaternion rot = mb != null ? mb.DirectionRotation : Quaternion.identity;
+
         if (rule.allowX) {
-            SpawnArrowOnSurface(arrowXPrefab, target, bounds, Vector3.right,    Vector3.right);
-            SpawnArrowOnSurface(arrowXPrefab, target, bounds, Vector3.left,     Vector3.right);
+            SpawnArrowOnSurface(arrowXPrefab, target, bounds, rot * Vector3.right,   Vector3.right);
+            SpawnArrowOnSurface(arrowXPrefab, target, bounds, rot * Vector3.left,    Vector3.right);
         }
         if (rule.allowZ) {
-            SpawnArrowOnSurface(arrowZPrefab, target, bounds, Vector3.forward,  Vector3.forward);
-            SpawnArrowOnSurface(arrowZPrefab, target, bounds, Vector3.back,     Vector3.forward);
+            SpawnArrowOnSurface(arrowZPrefab, target, bounds, rot * Vector3.forward, Vector3.forward);
+            SpawnArrowOnSurface(arrowZPrefab, target, bounds, rot * Vector3.back,    Vector3.forward);
         }
         if (rule.allowY) {
-            SpawnArrowOnSurface(arrowYPrefab, target, bounds, Vector3.up,       Vector3.up);
-            SpawnArrowOnSurface(arrowYPrefab, target, bounds, Vector3.down,     Vector3.up);
+            SpawnArrowOnSurface(arrowYPrefab, target, bounds, rot * Vector3.up,      Vector3.up);
+            SpawnArrowOnSurface(arrowYPrefab, target, bounds, rot * Vector3.down,    Vector3.up);
         }
     }
 
