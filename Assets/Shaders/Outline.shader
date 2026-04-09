@@ -44,8 +44,11 @@ Shader "Custom/Outline"
                 float3 outlineNormal = (dot(v.smoothNormal, v.smoothNormal) > 0.0001)
                     ? normalize(v.smoothNormal)
                     : v.normal;
-                float3 expandedPos = v.vertex.xyz + outlineNormal * _OutlineWidth;
-                o.pos = UnityObjectToClipPos(float4(expandedPos, 1.0));
+                // Expand in world space so the border is a constant width
+                // regardless of the object's local scale.
+                float3 worldNormal = normalize(mul((float3x3)unity_ObjectToWorld, outlineNormal));
+                float3 worldPos    = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.pos = mul(UNITY_MATRIX_VP, float4(worldPos + worldNormal * _OutlineWidth, 1.0));
                 return o;
             }
 
