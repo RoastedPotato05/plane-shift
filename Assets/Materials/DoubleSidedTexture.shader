@@ -42,7 +42,9 @@ Shader "Custom/DoubleSidedTexture"
                 // Push each vertex away from the projected object center in NDC,
                 // scaled proportionally so corners fill in on hard-edged meshes.
                 float2 dir = clipPos.xy / clipPos.w - origin.xy / origin.w;
-                clipPos.xy += dir * (_OutlineWidth * clipPos.w);
+                // Normalize direction so the offset is constant regardless of object size.
+                float2 dirNorm = (length(dir) > 0.0001) ? normalize(dir) : float2(0.0, 1.0);
+                clipPos.xy += dirNorm * (_OutlineWidth * clipPos.w);
                 return clipPos;
             }
 
