@@ -2732,7 +2732,7 @@ MonoBehaviour:
   arrowYPrefab: {fileID: 1781862151541236117, guid: f925fe9aea207e849b281ad00559f801, type: 3}
   arrowSurfaceOffset: 0
   arrowPivotOffset: 1.2
-  showSelectionHighlight: 1
+  showSelectionHighlight: 0
   selectionHighlightColor: {r: 0, g: 0, b: 0, a: 0.2}
   selectionHighlightLineWidth: 0.02
   maxHighlightEdges: 1500
