@@ -140,15 +140,15 @@ public class _3DCameraController : MonoBehaviour
             return;
         }
 
-        if (onlyWhenPrimaryView && !IsPrimaryView()) {
-            UpdateCameraTransform();
-            return;
-        }
-
+        // Object dragging always works, even from the preview window.
         HandleObjectSelectionAndMovement();
         UpdateSelectionVisual();
-        HandleRotationInput();
-        HandleZoomInput();
+
+        // Rotation and zoom only when this camera is the active primary view.
+        if (!onlyWhenPrimaryView || IsPrimaryView()) {
+            HandleRotationInput();
+            HandleZoomInput();
+        }
 
         UpdateCameraTransform();
     }
@@ -839,13 +839,29 @@ public class _3DCameraController : MonoBehaviour
 
     private Vector2 GetMousePosition()
     {
+        Vector2 rawPos;
 #if ENABLE_INPUT_SYSTEM
         Mouse mouse = Mouse.current;
-        if (mouse != null) {
-            return mouse.position.ReadValue();
-        }
+        rawPos = mouse != null ? mouse.position.ReadValue() : (Vector2)Input.mousePosition;
+#else
+        rawPos = Input.mousePosition;
 #endif
-        return Input.mousePosition;
+        // When rendering to a RenderTexture the camera has no screen viewport,
+        // so remap the mouse from the preview rect into full-screen space.
+        if (attachedCamera.targetTexture != null)
+        {
+            Main main = FindObjectOfType<Main>();
+            if (main != null)
+            {
+                Rect preview = main.GetPreviewScreenRect();
+                if (!preview.Contains(rawPos))
+                    return new Vector2(-9999f, -9999f); // outside preview — suppress
+                float nx = (rawPos.x - preview.x) / preview.width;
+                float ny = (rawPos.y - preview.y) / preview.height;
+                return new Vector2(nx * Screen.width, ny * Screen.height);
+            }
+        }
+        return rawPos;
     }
 
     private float GetScrollDelta()
@@ -871,6 +887,8 @@ public class _3DCameraController : MonoBehaviour
 
     private bool IsPrimaryView()
     {
+        // A camera rendering to a RenderTexture has no screen presence even if rect is full.
+        if (attachedCamera.targetTexture != null) return false;
         Rect r = attachedCamera.rect;
         return r.width >= 0.99f && r.height >= 0.99f;
     }

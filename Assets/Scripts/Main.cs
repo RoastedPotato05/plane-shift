@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class Main : MonoBehaviour
 {
@@ -10,6 +11,9 @@ public class Main : MonoBehaviour
 
     [Header("Level Complete")]
     [SerializeField] private GameObject levelCompleteUI;
+
+    [Header("Level Fail")]
+    [SerializeField] private GameObject levelFailUI;
 
     [Header("Display Settings")]
     [SerializeField] private bool startWith2DView = true;
@@ -22,16 +26,52 @@ public class Main : MonoBehaviour
     private bool is2DPrimary;
     private RenderTexture previewRT;
     private Camera currentPreviewCamera;
+    private Canvas previewCanvas;
+    private RawImage previewImage;
+    private Vector2Int lastScreenSize;
 
     private void Awake()
     {
         if (levelCompleteUI != null) {
             levelCompleteUI.SetActive(false);
         }
+        if (levelFailUI != null) {
+            levelFailUI.SetActive(false);
+        }
         BakeOutlineSmoothNormals();
         ApplyTagOutlines();
         is2DPrimary = startWith2DView;
+        CreatePreviewUI();
         ApplyCameraLayout();
+    }
+
+    private void CreatePreviewUI()
+    {
+        GameObject canvasGO = new GameObject("_PreviewCanvas");
+        canvasGO.hideFlags = HideFlags.DontSave;
+        previewCanvas = canvasGO.AddComponent<Canvas>();
+        previewCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        previewCanvas.sortingOrder = -100;
+
+        GameObject imageGO = new GameObject("_PreviewImage");
+        imageGO.hideFlags = HideFlags.DontSave;
+        imageGO.transform.SetParent(canvasGO.transform, false);
+        previewImage = imageGO.AddComponent<RawImage>();
+        UpdatePreviewImageTransform();
+    }
+
+    private void UpdatePreviewImageTransform()
+    {
+        if (previewImage == null) return;
+        RectTransform rt = previewImage.rectTransform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = Vector2.zero;
+        rt.anchoredPosition = new Vector2(
+            Screen.width * previewMargin,
+            Screen.height * (1f - previewMargin - previewHeight)
+        );
+        rt.sizeDelta = new Vector2(Screen.width * previewWidth, Screen.height * previewHeight);
     }
 
     private void Update()
@@ -40,6 +80,21 @@ public class Main : MonoBehaviour
             is2DPrimary = !is2DPrimary;
             ApplyCameraLayout();
         }
+
+        if (previewImage != null) {
+            previewImage.color = new Color(1f, 1f, 1f, previewAlpha);
+            Vector2Int currentSize = new Vector2Int(Screen.width, Screen.height);
+            if (currentSize != lastScreenSize) {
+                lastScreenSize = currentSize;
+                UpdatePreviewImageTransform();
+            }
+        }
+    }
+
+    public void ToggleCameraView()
+    {
+        is2DPrimary = !is2DPrimary;
+        ApplyCameraLayout();
     }
 
     private void ApplyCameraLayout()
@@ -62,9 +117,10 @@ public class Main : MonoBehaviour
         primaryCamera.depth = 0f;
         primaryCamera.enabled = true;
 
-        // Preview: render into RT; OnGUI draws it with alpha.
+        // Preview: render into RT; RawImage displays it with alpha.
         EnsurePreviewRT();
         previewCamera.targetTexture = previewRT;
+        if (previewImage != null) previewImage.texture = previewRT;
         previewCamera.rect = new Rect(0f, 0f, 1f, 1f);
         previewCamera.depth = 0f;
         previewCamera.enabled = true;
@@ -85,31 +141,25 @@ public class Main : MonoBehaviour
         }
         previewRT = new RenderTexture(rtW, rtH, 16);
         previewRT.Create();
+        if (previewImage != null) previewImage.texture = previewRT;
     }
 
-    private void OnGUI()
+    // Returns the preview rect in screen space (y=0 at bottom) for raycasting use.
+    public Rect GetPreviewScreenRect()
     {
-        if (previewRT == null) return;
-        EnsurePreviewRT();
-        if (currentPreviewCamera != null) currentPreviewCamera.targetTexture = previewRT;
-
-        float sw = Screen.width;
-        float sh = Screen.height;
-        float pw = sw * previewWidth;
-        float ph = sh * previewHeight;
-        float px = sw * previewMargin;
-        float py = sh * previewMargin;
-
-        Color prev = GUI.color;
-        GUI.color = new Color(1f, 1f, 1f, previewAlpha);
-        GUI.DrawTexture(new Rect(px, py, pw, ph), previewRT);
-        GUI.color = prev;
+        return new Rect(
+            Screen.width  * previewMargin,
+            Screen.height * (1f - previewMargin - previewHeight),
+            Screen.width  * previewWidth,
+            Screen.height * previewHeight
+        );
     }
 
     private void OnDestroy()
     {
         if (currentPreviewCamera != null) currentPreviewCamera.targetTexture = null;
         if (previewRT != null) { previewRT.Release(); Destroy(previewRT); previewRT = null; }
+        if (previewCanvas != null) Destroy(previewCanvas.gameObject);
     }
 
     private void SetAudioListenerState(Camera targetCamera, bool isEnabled)
@@ -122,14 +172,63 @@ public class Main : MonoBehaviour
 
     public void ShowLevelComplete()
     {
-        if (levelCompleteUI != null) {
+        if (levelCompleteUI == null) {
+            GameObject prefab = Resources.Load<GameObject>("LevelCompleteUI");
+            if (prefab != null) {
+                levelCompleteUI = Instantiate(prefab);
+                WireButtons(levelCompleteUI);
+            }
+        } else {
             levelCompleteUI.SetActive(true);
+        }
+
+        if (levelCompleteUI != null) {
             Canvas canvas = levelCompleteUI.GetComponent<Canvas>();
             if (canvas != null) {
                 canvas.enabled = false;
                 canvas.enabled = true;
             }
         }
+    }
+
+    public void ShowLevelFail()
+    {
+        // Use the scene reference if assigned; otherwise instantiate from Resources/LevelFailUI
+        if (levelFailUI == null) {
+            GameObject prefab = Resources.Load<GameObject>("LevelFailUI");
+            if (prefab != null) {
+                levelFailUI = Instantiate(prefab);
+                WireButtons(levelFailUI);
+            }
+        } else {
+            levelFailUI.SetActive(true);
+        }
+
+        if (levelFailUI != null) {
+            Canvas canvas = levelFailUI.GetComponent<Canvas>();
+            if (canvas != null) {
+                canvas.enabled = false;
+                canvas.enabled = true;
+            }
+        }
+    }
+
+    // Finds every Button in the UI and wires its name to a matching method on this script.
+    // Button GameObject names: "ReloadButton" -> ReloadScene, "NextLevelButton" -> LoadNextLevel.
+    private void WireButtons(GameObject ui)
+    {
+        foreach (Button btn in ui.GetComponentsInChildren<Button>(true))
+        {
+            string btnName = btn.gameObject.name;
+            btn.onClick.RemoveAllListeners();
+            if (btnName == "ReloadButton")      btn.onClick.AddListener(ReloadScene);
+            else if (btnName == "NextLevelButton") btn.onClick.AddListener(LoadNextLevel);
+        }
+    }
+
+    public void ReloadScene()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     public void LoadNextLevel()

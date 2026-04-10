@@ -1274,6 +1274,7 @@ MonoBehaviour:
   camera2D: {fileID: 1757286533}
   camera3D: {fileID: 1678172167}
   levelCompleteUI: {fileID: 648915199}
+  levelFailUI: {fileID: 0}
   startWith2DView: 0
   toggleKey: 9
   previewWidth: 0.28
@@ -3137,6 +3138,7 @@ MonoBehaviour:
   thrustAxis: 2
   flattenThrustToXZ: 1
   passiveDrag: 0
+  minSpeedThreshold: 0.5
   playerTag: Player
   obstacleTag: Obstacle
   wallTag: Wall

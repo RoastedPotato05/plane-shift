@@ -24,6 +24,7 @@ public class SpaceshipController : MonoBehaviour
 
     [Header("Optional Drift Damping")]
     [SerializeField] private float passiveDrag = 0f;
+    [SerializeField] private float minSpeedThreshold = 0.5f;
 
     [Header("Tag-Based XZ Collision")]
     [SerializeField] private string playerTag = "Player";
@@ -147,6 +148,11 @@ public class SpaceshipController : MonoBehaviour
         float targetTurnRate = turnInput * turnSpeed;
         currentTurnRate = Mathf.Lerp(currentTurnRate, targetTurnRate, turnSmoothing * Time.fixedDeltaTime);
 
+        // Snap to zero if coasting below the minimum speed threshold
+        if (thrustInput == 0f && body.velocity.magnitude < minSpeedThreshold) {
+            body.velocity = Vector3.zero;
+        }
+
         if (!Mathf.Approximately(currentTurnRate, 0f)) {
             float deltaYaw = currentTurnRate * Time.fixedDeltaTime;
             Quaternion targetRotation = Quaternion.Euler(0f, body.rotation.eulerAngles.y + deltaYaw, 0f);
@@ -245,6 +251,10 @@ public class SpaceshipController : MonoBehaviour
             }
 
             if (other.CompareTag(obstacleTag)) {
+                Main main = FindObjectOfType<Main>();
+                if (main != null) {
+                    main.ShowLevelFail();
+                }
                 Destroy(gameObject);
                 return;
             }
