@@ -35,7 +35,7 @@ public class CombineMeshesEditor
         {
             EditorUtility.DisplayDialog("Combine Meshes", "No meshes found in the selected GameObjects.", "OK");
             return;
-        }
+        } 
 
         // Build the combined mesh
         Mesh combinedMesh = new Mesh();
