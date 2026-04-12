@@ -23,6 +23,9 @@ public class Main : MonoBehaviour
     [SerializeField, Range(0.0f, 0.1f)] private float previewMargin = 0.02f;
     [SerializeField, Range(0f, 1f)] private float previewAlpha = 0.75f;
 
+    [Header("Outline Settings")]
+    [SerializeField] private Shader outlineShader;
+
     private bool is2DPrimary;
     private RenderTexture previewRT;
     private Camera currentPreviewCamera;
@@ -38,6 +41,7 @@ public class Main : MonoBehaviour
         if (levelFailUI != null) {
             levelFailUI.SetActive(false);
         }
+        EnsureOutlineShader();
         BakeOutlineSmoothNormals();
         ApplyTagOutlines();
         is2DPrimary = startWith2DView;
@@ -292,16 +296,27 @@ public class Main : MonoBehaviour
             // For objects without an outline-capable shader, add a child outline renderer
             // so the original material array is untouched (EzySlice requires materials.Length == submeshCount).
             if (!hasOutlineShader) {
-                Shader outlineShader = Shader.Find("Custom/Outline");
                 if (outlineShader != null) {
                     MeshFilter mf = rend.GetComponent<MeshFilter>();
                     if (mf != null && mf.sharedMesh != null) {
-                        GameObject outlineChild = new GameObject("OutlineRenderer");
+                        Transform existingChild = rend.transform.Find("OutlineRenderer");
+                        GameObject outlineChild = existingChild != null
+                            ? existingChild.gameObject
+                            : new GameObject("OutlineRenderer");
+
                         outlineChild.transform.SetParent(rend.transform, false);
                         outlineChild.hideFlags = HideFlags.DontSave;
-                        MeshFilter childMf = outlineChild.AddComponent<MeshFilter>();
+                        outlineChild.layer = rend.gameObject.layer;
+
+                        MeshFilter childMf = outlineChild.GetComponent<MeshFilter>();
+                        if (childMf == null) childMf = outlineChild.AddComponent<MeshFilter>();
                         childMf.sharedMesh = mf.sharedMesh;
-                        MeshRenderer childRend = outlineChild.AddComponent<MeshRenderer>();
+
+                        MeshRenderer childRend = outlineChild.GetComponent<MeshRenderer>();
+                        if (childRend == null) childRend = outlineChild.AddComponent<MeshRenderer>();
+                        childRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        childRend.receiveShadows = false;
+
                         Material outlineMat = new Material(outlineShader);
                         outlineMat.SetColor("_OutlineColor", color);
                         outlineMat.SetFloat("_OutlineWidth", width);
@@ -349,5 +364,16 @@ public class Main : MonoBehaviour
     {
         const float p = 1000f;
         return new Vector3(Mathf.Round(v.x * p) / p, Mathf.Round(v.y * p) / p, Mathf.Round(v.z * p) / p);
+    }
+
+    private void EnsureOutlineShader()
+    {
+        if (outlineShader == null) {
+            outlineShader = Shader.Find("Custom/Outline");
+        }
+
+        if (outlineShader == null) {
+            Debug.LogWarning("Outline shader not found. Assign Custom/Outline to Main.outlineShader to ensure WebGL builds include it.");
+        }
     }
 }
