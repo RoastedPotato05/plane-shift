@@ -391,7 +391,15 @@ public class _3DCameraController : MonoBehaviour
 
     private bool TryGetMousePointOnPlane(Plane plane, out Vector3 worldPoint)
     {
-        Ray ray = attachedCamera.ScreenPointToRay(GetMousePosition());
+        Vector2 mousePos = GetMousePosition();
+        
+        // Reject invalid/suppressed mouse positions (e.g., when outside preview rect)
+        if (mousePos.x < 0 || mousePos.y < 0) {
+            worldPoint = Vector3.zero;
+            return false;
+        }
+
+        Ray ray = attachedCamera.ScreenPointToRay(mousePos);
         if (plane.Raycast(ray, out float enterDistance)) {
             worldPoint = ray.GetPoint(enterDistance);
             return true;

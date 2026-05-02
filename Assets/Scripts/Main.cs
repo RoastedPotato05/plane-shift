@@ -9,6 +9,9 @@ public class Main : MonoBehaviour
     [SerializeField] private Camera camera2D;
     [SerializeField] private Camera camera3D;
 
+    [Header("Navigation")]
+    [SerializeField] private string levelSelectionSceneName = "Level_Selection";
+
     [Header("Level Complete")]
     [SerializeField] private GameObject levelCompleteUI;
 
@@ -26,12 +29,22 @@ public class Main : MonoBehaviour
     [Header("Outline Settings")]
     [SerializeField] private Shader outlineShader;
 
+    [Header("Audio")]
+    [SerializeField] private AudioClip levelCompleteSound;
+    [SerializeField] private AudioClip levelFailSound;
+    [SerializeField, Range(0f, 1f)] private float uiSoundVolume = 0.8f;
+    [SerializeField] private AudioClip[] backgroundMusicPlaylist;
+    [SerializeField, Range(0f, 1f)] private float backgroundMusicVolume = 0.5f;
+    [SerializeField, Range(0f, 2f)] private float musicFadeInDuration = 1f;
+    [SerializeField, Range(0f, 2f)] private float musicFadeOutDuration = 1f;
+
     private bool is2DPrimary;
     private RenderTexture previewRT;
     private Camera currentPreviewCamera;
     private Canvas previewCanvas;
     private RawImage previewImage;
     private Vector2Int lastScreenSize;
+    private AudioSource uiAudioSource;
 
     private void Awake()
     {
@@ -41,12 +54,58 @@ public class Main : MonoBehaviour
         if (levelFailUI != null) {
             levelFailUI.SetActive(false);
         }
+
+        // Auto-detect cameras if not assigned in prefab
+        if (camera2D == null || camera3D == null) {
+            AutoDetectCameras();
+        }
+
         EnsureOutlineShader();
         BakeOutlineSmoothNormals();
         ApplyTagOutlines();
         is2DPrimary = startWith2DView;
         CreatePreviewUI();
         ApplyCameraLayout();
+        SetupUIAudio();
+        SetupBackgroundMusic();
+    }
+
+    private void AutoDetectCameras()
+    {
+        _3DCameraController[] controllers = FindObjectsOfType<_3DCameraController>();
+        foreach (_3DCameraController controller in controllers) {
+            Camera cam = controller.GetComponent<Camera>();
+            if (cam != null) {
+                if (camera2D == null) {
+                    camera2D = cam;
+                } else if (camera3D == null) {
+                    camera3D = cam;
+                    break;
+                }
+            }
+        }
+
+        if (camera2D == null || camera3D == null) {
+            Debug.LogWarning("Main: Could not auto-detect both cameras. Please assign them manually in the Inspector.");
+        }
+    }
+
+    private void SetupUIAudio()
+    {
+        uiAudioSource = GetComponent<AudioSource>();
+        if (uiAudioSource == null) {
+            uiAudioSource = gameObject.AddComponent<AudioSource>();
+        }
+        uiAudioSource.playOnAwake = false;
+    }
+
+    private void SetupBackgroundMusic()
+    {
+        SessionMusicPlayer.EnsureRunning(
+            backgroundMusicPlaylist,
+            backgroundMusicVolume,
+            musicFadeInDuration,
+            musicFadeOutDuration);
     }
 
     private void CreatePreviewUI()
@@ -80,6 +139,11 @@ public class Main : MonoBehaviour
 
     private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape)) {
+            LoadLevelSelectionScene();
+            return;
+        }
+
         if (Input.GetKeyDown(toggleKey)) {
             is2DPrimary = !is2DPrimary;
             ApplyCameraLayout();
@@ -174,8 +238,139 @@ public class Main : MonoBehaviour
         }
     }
 
+    private void PlayUISound(AudioClip clip)
+    {
+        if (clip != null && uiAudioSource != null) {
+            uiAudioSource.clip = clip;
+            uiAudioSource.volume = uiSoundVolume;
+            uiAudioSource.PlayOneShot(clip, uiSoundVolume);
+        }
+    }
+
+    private sealed class SessionMusicPlayer : MonoBehaviour
+    {
+        private static SessionMusicPlayer instance;
+
+        private AudioSource musicSource;
+        private AudioClip[] playlist;
+        private float targetVolume;
+        private float fadeInDuration;
+        private float fadeOutDuration;
+        private int currentTrackIndex;
+        private Coroutine playbackRoutine;
+
+        public static void EnsureRunning(AudioClip[] newPlaylist, float newTargetVolume, float newFadeInDuration, float newFadeOutDuration)
+        {
+            if (newPlaylist == null || newPlaylist.Length == 0) {
+                return;
+            }
+
+            if (instance == null) {
+                GameObject musicHost = new GameObject("_SessionMusicPlayer");
+                DontDestroyOnLoad(musicHost);
+                instance = musicHost.AddComponent<SessionMusicPlayer>();
+            }
+
+            instance.Configure(newPlaylist, newTargetVolume, newFadeInDuration, newFadeOutDuration);
+        }
+
+        private void Configure(AudioClip[] newPlaylist, float newTargetVolume, float newFadeInDuration, float newFadeOutDuration)
+        {
+            playlist = newPlaylist;
+            targetVolume = newTargetVolume;
+            fadeInDuration = newFadeInDuration;
+            fadeOutDuration = newFadeOutDuration;
+
+            if (playlist.Length > 0) {
+                currentTrackIndex %= playlist.Length;
+            }
+
+            if (musicSource == null) {
+                musicSource = GetComponent<AudioSource>();
+                if (musicSource == null) {
+                    musicSource = gameObject.AddComponent<AudioSource>();
+                }
+                musicSource.playOnAwake = false;
+                musicSource.loop = false;
+                musicSource.volume = 0f;
+            }
+
+            if (playbackRoutine == null) {
+                currentTrackIndex = 0;
+                playbackRoutine = StartCoroutine(PlayPlaylistLoop());
+            }
+        }
+
+        private System.Collections.IEnumerator PlayPlaylistLoop()
+        {
+            while (true) {
+                if (playlist == null || playlist.Length == 0) {
+                    yield return null;
+                    continue;
+                }
+
+                AudioClip currentClip = playlist[currentTrackIndex];
+                if (currentClip == null) {
+                    AdvanceTrackIndex();
+                    yield return null;
+                    continue;
+                }
+
+                musicSource.clip = currentClip;
+                musicSource.volume = 0f;
+                musicSource.Play();
+
+                if (fadeInDuration > 0f) {
+                    yield return FadeVolume(0f, targetVolume, fadeInDuration);
+                } else {
+                    musicSource.volume = targetVolume;
+                }
+
+                float holdDuration = Mathf.Max(0f, currentClip.length - fadeOutDuration);
+                if (holdDuration > 0f) {
+                    yield return new WaitForSecondsRealtime(holdDuration);
+                }
+
+                if (fadeOutDuration > 0f) {
+                    yield return FadeVolume(targetVolume, 0f, fadeOutDuration);
+                } else {
+                    musicSource.volume = 0f;
+                }
+
+                musicSource.Stop();
+                AdvanceTrackIndex();
+            }
+        }
+
+        private System.Collections.IEnumerator FadeVolume(float fromVolume, float toVolume, float duration)
+        {
+            if (duration <= 0f) {
+                musicSource.volume = toVolume;
+                yield break;
+            }
+
+            float elapsedTime = 0f;
+            while (elapsedTime < duration) {
+                elapsedTime += Time.unscaledDeltaTime;
+                float normalizedTime = Mathf.Clamp01(elapsedTime / duration);
+                musicSource.volume = Mathf.Lerp(fromVolume, toVolume, normalizedTime);
+                yield return null;
+            }
+
+            musicSource.volume = toVolume;
+        }
+
+        private void AdvanceTrackIndex()
+        {
+            currentTrackIndex = (currentTrackIndex + 1) % playlist.Length;
+        }
+    }
+
     public void ShowLevelComplete()
     {
+        MarkCurrentLevelComplete();
+        PlayUISound(levelCompleteSound);
+
         if (levelCompleteUI == null) {
             GameObject prefab = Resources.Load<GameObject>("LevelCompleteUI");
             if (prefab != null) {
@@ -197,6 +392,8 @@ public class Main : MonoBehaviour
 
     public void ShowLevelFail()
     {
+        PlayUISound(levelFailSound);
+
         // Use the scene reference if assigned; otherwise instantiate from Resources/LevelFailUI
         if (levelFailUI == null) {
             GameObject prefab = Resources.Load<GameObject>("LevelFailUI");
@@ -241,6 +438,22 @@ public class Main : MonoBehaviour
         if (nextIndex < SceneManager.sceneCountInBuildSettings) {
             SceneManager.LoadScene(nextIndex);
         }
+    }
+
+    public void LoadLevelSelectionScene()
+    {
+        if (string.IsNullOrWhiteSpace(levelSelectionSceneName)) {
+            Debug.LogWarning("Main: Level selection scene name is not set.", this);
+            return;
+        }
+
+        SceneManager.LoadScene(levelSelectionSceneName);
+    }
+
+    private static void MarkCurrentLevelComplete()
+    {
+        string sceneName = SceneManager.GetActiveScene().name;
+        LevelCompletionSessionState.MarkCompleted(sceneName);
     }
 
     private static string FindMovableTag(GameObject obj)

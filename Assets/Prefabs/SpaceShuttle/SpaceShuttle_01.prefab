@@ -11,9 +11,12 @@ GameObject:
   - component: {fileID: 486654}
   - component: {fileID: 3303276}
   - component: {fileID: 2357552}
+  - component: {fileID: 1785765951}
+  - component: {fileID: 1785765945}
+  - component: {fileID: 1785765946}
   m_Layer: 0
   m_Name: SpaceShuttle_01
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -83,3 +86,72 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!64 &1785765951
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 111078}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 4
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 4300000, guid: 1c43257c3c2b67241adbe1cb13eb5305, type: 3}
+--- !u!114 &1785765945
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 111078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccf3cc392e8c3fd4992f6ef2d97a917c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thrustForce: 14
+  turnSpeed: 140
+  turnSmoothing: 8
+  thrustAxis: 2
+  flattenThrustToXZ: 1
+  passiveDrag: 0
+  minSpeedThreshold: 1
+  playerTag: Player
+  obstacleTag: Obstacle
+  wallTag: Wall
+  goalTag: Goal
+  collisionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  verticalDetectionHalfHeight: 50
+  footprintScale: 1
+  wallBounceMultiplier: 0.9
+  wallSeparationDistance: 0.2
+  minBounceSpeed: 2
+  goalBrakeDrag: 6
+  debugCollisionGizmo: 0
+  debugGizmoY: 70
+  debugDrawTaggedColliders: 0
+  thrustAudioClip: {fileID: 8300000, guid: 81e73bcc800719b4d806ae17a50dca27, type: 3}
+  maxThrustVolume: 0.15
+  fadeInDuration: 0.1
+  fadeOutDuration: 0.2
+--- !u!54 &1785765946
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 111078}
+  serializedVersion: 2
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0

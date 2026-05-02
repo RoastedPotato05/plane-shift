@@ -48,6 +48,12 @@ public class SpaceshipController : MonoBehaviour
     [SerializeField] private float debugGizmoY = 70f;
     [SerializeField] private bool debugDrawTaggedColliders = true;
 
+    [Header("Thrust Audio")]
+    [SerializeField] private AudioClip thrustAudioClip;
+    [SerializeField, Range(0f, 1f)] private float maxThrustVolume = 0.3f;
+    [SerializeField, Range(0f, 1f)] private float fadeInDuration = 0.1f;
+    [SerializeField, Range(0f, 1f)] private float fadeOutDuration = 0.2f;
+
     private Rigidbody body;
     private Collider shipCollider;
     private float fixedY;
@@ -55,6 +61,11 @@ public class SpaceshipController : MonoBehaviour
     private bool levelComplete;
     private readonly List<Vector3> shipSampleLocalPoints = new List<Vector3>();
     private Vector3 previousPlanePosition;
+
+    // Thrust audio state
+    private AudioSource thrustAudioSource;
+    private bool isThrustingPrevious;
+    private float currentThrustVolumeAlpha;
 
     private void Awake()
     {
@@ -86,6 +97,26 @@ public class SpaceshipController : MonoBehaviour
 
         BuildShipSamplePoints();
         previousPlanePosition = body.position;
+
+        // Initialize thrust audio source
+        SetupThrustAudio();
+    }
+
+    private void SetupThrustAudio()
+    {
+        thrustAudioSource = GetComponent<AudioSource>();
+        if (thrustAudioSource == null && thrustAudioClip != null) {
+            thrustAudioSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        if (thrustAudioSource != null && thrustAudioClip != null) {
+            thrustAudioSource.clip = thrustAudioClip;
+            thrustAudioSource.loop = true;
+            thrustAudioSource.volume = 0f;
+            thrustAudioSource.Play();
+            isThrustingPrevious = false;
+            currentThrustVolumeAlpha = 0f;
+        }
     }
 
     private Collider ResolveShipCollider()
@@ -166,6 +197,35 @@ public class SpaceshipController : MonoBehaviour
         }
 
         previousPlanePosition = body.position;
+    }
+
+    private void Update()
+    {
+        UpdateThrustAudio();
+    }
+
+    private void UpdateThrustAudio()
+    {
+        if (thrustAudioSource == null) return;
+
+        bool isThrustingNow = Input.GetKey(KeyCode.W) && !levelComplete;
+
+        if (isThrustingNow != isThrustingPrevious) {
+            isThrustingPrevious = isThrustingNow;
+        }
+
+        // Fade in when thrusting, fade out when not
+        float targetVolume = isThrustingNow ? maxThrustVolume : 0f;
+        float fadeDuration = isThrustingNow ? fadeInDuration : fadeOutDuration;
+
+        if (fadeDuration > 0f) {
+            float fadeSpeed = 1f / fadeDuration;
+            currentThrustVolumeAlpha = Mathf.Lerp(currentThrustVolumeAlpha, targetVolume, fadeSpeed * Time.deltaTime);
+        } else {
+            currentThrustVolumeAlpha = targetVolume;
+        }
+
+        thrustAudioSource.volume = currentThrustVolumeAlpha;
     }
 
     private Vector3 GetThrustDirection()
